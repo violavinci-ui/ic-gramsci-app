@@ -22,7 +22,7 @@ st.markdown("""
         border-radius: 12px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         margin-bottom: 12px;
-        border-left: 5px solid #d9534f; /* Bordo rosso/arancio per evidenziare l'area docenti */
+        border-left: 5px solid #d9534f;
     }
     .badge {
         background-color: #ffebe9;
@@ -52,24 +52,30 @@ st.subheader("📢 Solo Circolari Docenti")
 
 BASE_URL = "https://www.icalbanopavona.edu.it"
 
+# Headers per simulare un browser reale ed evitare il blocco del server
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
+
 @st.cache_data(ttl=300)
 def fetch_circolari_docenti():
     try:
-        # Tenta il recupero con filtro sulla tipologia 'circolari-per-docenti'
+        # Tentativo con la tipologia specifica per docenti
         api_url = f"{BASE_URL}/wp-json/wp/v2/circolare?tipologia-circolare=circolari-per-docenti&per_page=20"
-        response = requests.get(api_url, timeout=6)
+        response = requests.get(api_url, headers=HEADERS, timeout=8)
         
-        # Se la tassonomia usa un formato diverso, recupera le circolari generali per poi filtrarle via codice
+        # Se fallisce o non restituisce nulla, scarichiamo i post generali e filtriamo
         if response.status_code != 200 or len(response.json()) == 0:
-            api_url = f"{BASE_URL}/wp-json/wp/v2/circolare?per_page=30"
-            response = requests.get(api_url, timeout=6)
+            api_url = f"{BASE_URL}/wp-json/wp/v2/circolare?per_page=40"
+            response = requests.get(api_url, headers=HEADERS, timeout=8)
+            
             if response.status_code == 200:
                 posts = response.json()
-                # Filtra mantenendo solo i titoli che riguardano i docenti/personale
+                # Filtriamo i titoli legati al personale docente
                 docenti_posts = [
                     p for p in posts 
                     if any(term in p.get('title', {}).get('rendered', '').lower() 
-                           for term in ['docent', 'collegio', 'consiglio', 'scrutini', 'convocaz', 'personale', 'punti'])
+                           for term in ['docent', 'collegio', 'consiglio', 'scrutini', 'convocaz', 'personale', 'orario', 'formazione'])
                 ]
                 return docenti_posts
         
@@ -77,20 +83,20 @@ def fetch_circolari_docenti():
             return response.json()
         else:
             return None
-    except:
+    except Exception as e:
         return None
 
-with st.spinner("Scaricamento circolari docenti..."):
+with st.spinner("Connessione al sito scolastico in corso..."):
     posts = fetch_circolari_docenti()
 
 if posts is None:
-    st.error("Impossibile connettersi al sito dell'IC Albano Pavona.")
+    st.error("Impossibile connettersi al sito dell'IC Albano Pavona. Riprova più tardi.")
 elif len(posts) == 0:
-    st.info("Nessuna circolare specifica per i docenti trovata di recente.")
+    st.info("Nessuna circolare specifica per i docenti trovata al momento.")
 else:
     st.caption(f"Trovate {len(posts)} circolari per il personale docente.")
     
-    ricerca = st.text_input("🔍 Filtra (es. 'Collegio', 'Consiglio', 'Orario')...", "")
+    ricerca = st.text_input("🔍 Filtra circolari (es. 'Collegio', 'Orario')...", "")
     
     count = 0
     for post in posts:
@@ -114,7 +120,7 @@ else:
                     <div class="title">{title}</div>
                 </div>
             """, unsafe_allow_html=True)
-            st.link_button("📄 Apri circolare integrata", link)
+            st.link_button("📄 Apri circolare integrale", link)
             st.write("")
 
     if count == 0 and ricerca:
